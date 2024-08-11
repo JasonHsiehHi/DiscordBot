@@ -1,132 +1,122 @@
-from distutils.log import error
 import discord
 from discord.ext import commands
-from pprint import pprint
 import httplib2
 import os
-from apiclient import discovery
-import random
-import asyncio
-TOKEN = os.environ['TOKEN']
-APIKey = os.environ['APIKEY']
-SpreadsheetId = os.environ['SHEET_ID']
-ReplySheetName = os.environ['REPLY_SHEET']
+from googleapiclient import discovery
+import anthropic
+
+
+# Google Sheets API env
+GoogleAPIKey = os.environ['GOOLEAPIKEY']
+SpreadsheetId = os.environ['SHEET_ID']  # 要使用哪一個Sheet和Range全由env決定
+DatabaseRange = os.environ['DATABASERANGE']
 RoleSheetName = os.environ['ROLE_SHEET']
+
+# Claude API env
+ClaudeAPIKey = os.environ['CLAUDEAPIKEY']
+
+#DiscordBot env
+TOKEN = os.environ['TOKEN']
 guildid = os.environ['GUILD_ID']
 rolemessageid = os.environ['ROLE_MESSAGE_ID']
+
 
 #Google API
 discoveryUrl = ('https://sheets.googleapis.com/$discovery/rest?'
                     'version=v4')
-service = discovery.build(
+service = discovery.build(  # servive只是獲取權限訪問Google的API而已
     'sheets',
     'v4',
     http=httplib2.Http(),
     discoveryServiceUrl=discoveryUrl,
-    developerKey=APIKey)
+    developerKey=GoogleAPIKey)
 
-reactRange = RoleSheetName + '!A2:B'
-rangeName = ReplySheetName + '!A2:D'
+reactRange = RoleSheetName + '!A2:B' # 刪了
+rangeName = DatabaseRange # 刪了
 
+#Claude API
+client = anthropic.Anthropic(
+    api_key=ClaudeAPIKey,
+)
+
+#Discord API
 intent=discord.Intents.all()
-client = commands.Bot(command_prefix = "!",intents=intent)
+clientBot = commands.Bot(command_prefix = "/",intents=intent)
 
+# pronmpt設定
+def get_default_prompt(sheet_content):
+    pronmpt = f'''\
+        1.回答時，僅能依據目前收集到的資料內容，若當前資料內容不足以作出判斷，則告知可能仍缺少的資料內容
+        2.回答時，應盡量保持簡潔明瞭
+        3.回答時，若多筆資料內容相互牴觸，則以時間最新的資料內容為準
+        4.回答後，不能沒有任何依據，必須附上所參考的資料內容，須包含該篇資料內容的時間、來源、標題三項
+        5.回答後，最後都必須告知遊戲後續仍可能會參考玩家反饋狀況作出適當調整
+        以下為資料內容：
+        {sheet_content}
+    '''
+    return pronmpt
+
+
+# todo: 增加可依據時間區間決定所需資料內容
+def get_sheets_data(): 
+    result = service.spreadsheets().values().get(
+        spreadsheetId=SpreadsheetId, range=DatabaseRange).execute()
+    values = result.get('values', [])
+    headers = values[0]
+    data = values[1:]
+    sheet_content = f"Headers: {headers}\n"
+    sheet_content += "\n".join([", ".join(row) for row in data])
+    
+    return sheet_content
+
+# todo:為減少每次讀取的資料量 應分為2次訪問 第1次判斷要訪問那些資料(以類別分類)，第2次在針對這些資料訪問
+def send_to_claude(message_prompt, default_prompt):
+    try:
+        message = client.messages.create(
+            model="claude-3-haiku-20240307",
+            max_tokens=300,
+            temperature=0.1, # 數值範圍在0~1之間，數值越低則依據精確事實回答；數值越高則多樣性回答
+            messages=[
+                {"role": "user", "content": f"{message_prompt}\n{default_prompt}"}
+            ]
+        )
+
+    except anthropic.APIError as e: # API 錯誤（例如無效的請求、認證錯誤等）
+        response = f"API錯誤: {str(e)}"
+
+    except anthropic.APIConnectionError as e: # 連接錯誤（例如網絡問題）
+        response = f"連接錯誤: {str(e)}"
+
+    except Exception as e: # 其他未預期的錯誤
+        response = f"發生未知錯誤: {str(e)}"
+
+    response = message.content[0].text
+    return response
+
+
+sheet_content = get_sheets_data()
+default_prompt = get_default_prompt(sheet_content)
 
 
 
 # 起動時呼叫
-@client.event
-async def on_ready():
-    print('成功登入')
+@clientBot.event
+async def on_ready():                       
+    print(f'Logged in as {clientBot.user}')
 
-#添加身分組
-@client.event
-async def on_raw_reaction_add(payload):
-    if str(payload.message_id) == rolemessageid:
-        guild = client.get_guild(int(guildid))
-        result = service.spreadsheets().values().get(
-        spreadsheetId=SpreadsheetId, range=reactRange).execute()
-        values = result.get('values', [])
-        if not values:
-            return
-        for row in values:
-            if payload.emoji.name == row[0]:
-                role = discord.utils.get(guild.roles, name=row[1])
-                if not role == None:
-                    await payload.member.add_roles(role)
-
-#移除身分組
-@client.event
-async def on_raw_reaction_remove(payload):
-    if str(payload.message_id) == rolemessageid:
-        guild = client.get_guild(int(guildid))
-        result = service.spreadsheets().values().get(
-        spreadsheetId=SpreadsheetId, range=reactRange).execute()
-        values = result.get('values', [])
-        if not values:
-            return
-        for row in values:
-            if payload.emoji.name == row[0]:
-                role = discord.utils.get(guild.roles, name=row[1])
-                member = discord.utils.get(guild.members, id=payload.user_id)
-                if not role == None:
-                    await member.remove_roles(role)
-
-
-
-# 收到訊息時呼叫
-@client.event
-async def on_message(message):
-    
-    # 送信者為Bot時無視
-    if message.author.bot:
+# todo: 要能決定gameid 這樣才能選擇在g66和h73中使用
+@clientBot.command()
+async def ask(ctx ,* ,message:str=None):
+    if ctx.author.bot: # 送信者為Bot時無視
         return
-    await client.process_commands(message)
-    #私訊
-    if message.guild == None:
+    if ctx.guild == None: # 不能私訊詢問
         return
-    result = service.spreadsheets().values().get(
-    spreadsheetId=SpreadsheetId, range=rangeName).execute()
-    values = result.get('values', [])
-    if not values:
-        return
-    else:
-        for row in values:
-            if (message.channel.name == row[0] or row[0] == ''):
-                keywords = row[1].split()
-                check = True
-                for keyword in keywords:
-                    if not keyword in message.content:
-                        check = False
-                        break
-                if check:
-                    if message.author.nick == None:
-                        username = message.author.name
-                    else:
-                            username = message.author.nick
-                    if '<ban>' in row[2]:
-                        await message.author.ban()
-                    else:
-                        if '<kick>' in row[2]:
-                            await message.author.kick()
-                        if '<delete>' in row[2]:
-                            await message.delete()
-                        else:
-                            if '<reply>' in row[2]:
-                                await message.reply(row[3].replace('<username>',username))
-                            if '<replyrandom>' in row[2]:
-                                msgs = row[3].split('|')
-                                if len(msgs) != 0:
-                                    index = random.randint(0, len(msgs)-1)
-                                    await message.reply(msgs[index].replace('<username>',username))
-                    if '<send>' in row[2]:
-                        await message.channel.send(row[3].replace('<username>',username))
-                    if '<sendrandom>' in row[2]:
-                        msgs = row[3].split('|')
-                        if len(msgs) != 0:
-                            index = random.randint(0, len(msgs)-1)
-                            await message.channel.send(msgs[index].replace('<username>',username))
-                    return
-    
+
+    if not message:
+        await ctx.send("沒有提問任何問題")
+
+    response = send_to_claude(message, default_prompt)
+    await ctx.send(response)
+
 # Bot起動
-client.run(TOKEN)
+clientBot.run(TOKEN)
