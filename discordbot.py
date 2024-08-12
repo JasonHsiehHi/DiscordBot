@@ -2,7 +2,7 @@ import discord
 from discord.ext import commands
 import httplib2
 import os
-from googleapiclient import discovery
+from apiclient import discovery
 import anthropic
 
 
