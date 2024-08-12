@@ -10,16 +10,12 @@ import anthropic
 GoogleAPIKey = os.environ['GOOLEAPIKEY']
 SpreadsheetId = os.environ['SHEET_ID']  # 要使用哪一個Sheet和Range全由env決定
 DatabaseRange = os.environ['DATABASERANGE']
-RoleSheetName = os.environ['ROLE_SHEET']
 
 # Claude API env
 ClaudeAPIKey = os.environ['CLAUDEAPIKEY']
 
 #DiscordBot env
 TOKEN = os.environ['TOKEN']
-guildid = os.environ['GUILD_ID']
-rolemessageid = os.environ['ROLE_MESSAGE_ID']
-
 
 #Google API
 discoveryUrl = ('https://sheets.googleapis.com/$discovery/rest?'
@@ -30,9 +26,6 @@ service = discovery.build(  # servive只是獲取權限訪問Google的API而已
     http=httplib2.Http(),
     discoveryServiceUrl=discoveryUrl,
     developerKey=GoogleAPIKey)
-
-reactRange = RoleSheetName + '!A2:B' # 刪了
-rangeName = DatabaseRange # 刪了
 
 #Claude API
 client = anthropic.Anthropic(
@@ -98,11 +91,14 @@ sheet_content = get_sheets_data()
 default_prompt = get_default_prompt(sheet_content)
 
 
-
 # 起動時呼叫
 @clientBot.event
 async def on_ready():                       
     print(f'Logged in as {clientBot.user}')
+
+# todo: 新增refresh 和 list 方法
+# async def refresh(ctx):
+# async def list(ctx):
 
 # todo: 要能決定gameid 這樣才能選擇在g66和h73中使用
 @clientBot.command()
