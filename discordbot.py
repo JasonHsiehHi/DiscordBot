@@ -5,7 +5,12 @@ import os
 from apiclient import discovery
 import anthropic
 
+from . import excel_utils
+from . import web_driver
 
+from dotenv import load_dotenv
+
+load_dotenv()
 # Google Sheets API env
 GoogleAPIKey = os.environ['GOOLEAPIKEY']
 SpreadsheetId = os.environ['SHEET_ID']  # 要使用哪一個Sheet和Range全由env決定
@@ -50,7 +55,7 @@ def get_default_prompt(sheet_content):
     return pronmpt
 
 
-# todo: 增加可依據時間區間決定所需資料內容
+# TODO: 增加可依據時間區間決定所需資料內容
 def get_sheets_data(): 
     result = service.spreadsheets().values().get(
         spreadsheetId=SpreadsheetId, range=DatabaseRange).execute()
@@ -62,7 +67,7 @@ def get_sheets_data():
     
     return sheet_content
 
-# todo:為減少每次讀取的資料量 應分為2次訪問 第1次判斷要訪問那些資料(以類別分類)，第2次在針對這些資料訪問
+# TODO:為減少每次讀取的資料量 應分為2次訪問 第1次判斷要訪問那些資料(以類別分類)，第2次在針對這些資料訪問
 def send_to_claude(message_prompt, default_prompt):
     try:
         message = client.messages.create(
@@ -96,13 +101,16 @@ default_prompt = get_default_prompt(sheet_content)
 async def on_ready():                       
     print(f'Logged in as {clientBot.user}')
 
-# todo: 新增refresh 和 list 方法
+# TODO: 新增refresh 和 list 方法
 # async def refresh(ctx):
 # async def list(ctx):
 
-# todo: 要能決定gameid 這樣才能選擇在g66和h73中使用
+
 @clientBot.command()
-async def ask(ctx ,* ,message:str=None):
+async def ask(ctx ,game_id:str ,* ,message:str=None):
+    await ctx.send("仍在施工中!")
+    return
+
     if ctx.author.bot: # 送信者為Bot時無視
         return
     if ctx.guild == None: # 不能私訊詢問
@@ -114,5 +122,56 @@ async def ask(ctx ,* ,message:str=None):
     response = send_to_claude(message, default_prompt)
     await ctx.send(response)
 
-# Bot起動
-clientBot.run(TOKEN)
+# TODO: 要能決定gameid 這樣才能選擇在g66和h73中使用
+@clientBot.command()
+async def h73_ask(ctx ,* ,message:str=None):
+    await ask(ctx, "h73", message=message)
+    
+@clientBot.command()
+async def g66_ask(ctx ,* ,message:str=None):
+    await ask(ctx, "g66", message=message)
+
+
+@clientBot.command()
+async def h73_log(ctx ,* ,message:str=None):
+    if ctx.author.bot: # 送信者為Bot時無視
+        return
+    if ctx.guild == None: # 不能私訊詢問
+        return
+    
+    if message.attachments:
+        attachment = message.attachments[0]
+        if attachment.filename.endswith(('.xlsx', '.xls')):
+            file_bytes = await attachment.read()
+            precise_list = excel_utils.conver_to_criteria(file_bytes)
+            result_dict = web_driver.get_loglists_precisely(precise_list)
+            
+            send_time = message.created_at
+            formatted_time = send_time.strftime("%Y%m%d%H%M%S")
+            excel_utils.write_log_to_excel(formatted_time, result_dict)
+            
+            # 回應用戶，展示文件中的數據
+            await message.channel.send(f"讀取文件: {attachment.filename}\n輸出文件如下:\noutput_{formatted_time}.xlsx")
+
+
+
+@clientBot.command()
+async def g66_log(ctx ,* ,message:str=None):
+    await ctx.send("仍在施工中!")
+    return
+
+
+"""
+ 此方法會監聽所有對話 不實用且會導致效能耗損
+@client.event
+async def on_message(message):
+    if message.author == client.user: # 扣除bot自己發送的對話 壁面無限迴圈
+        return
+"""
+
+# === test ===
+# from importlib import reload
+
+if __name__ == '__main__':
+    clientBot.run(TOKEN) # Bot起動
+    
