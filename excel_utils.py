@@ -1,6 +1,7 @@
 import pandas as pd
 from io import BytesIO
 import json
+from datetime import datetime
 
 def conver_to_criteria(file_for_log) -> list:
     if isinstance(file_for_log, bytes):
@@ -30,14 +31,40 @@ def input_excel_and_conver(file_path:str) -> list:
     precise_list = conver_to_criteria(file_path) # './input/file_name.xlsx'
     return precise_list
 
+def get_time() -> str:
+    current_time = datetime.now()
+    formatted_time = current_time.strftime("%Y%m%d%H%M%S")
+    return formatted_time
+    
 
 # === test ===
 # from importlib import reload
-
 # import excel_utils as eu
 
 if __name__ == '__main__':
-    precise_list = input_excel_and_conver("./input/H73_xzxgain_for_lost.xlsx")
+    import web_driver as wd
+    import os
+    precise_list = input_excel_and_conver("./input/H73_xzxgain_for_lost_list.xlsx")
     print(precise_list)
-    precise_list2 = input_excel_and_conver("./input/H73_jinghua_reward_for_lost.xlsx")
+    precise_list2 = input_excel_and_conver("./input/H73_jinghua_reward_for_lost_list.xlsx")
     print(precise_list2)
+    
+    #test_list = input_excel_and_conver("./input/H73_test.xlsx")
+    #print(test_list)
+    
+    wd.setup_by_bot()
+    
+    h73_Workid = os.environ['H73WORKID']
+    h73_Password = os.environ['H73PASSWORD']
+    wd.open_and_login("h73", h73_Workid, h73_Password)
+    
+    result_dict = wd.get_loglists_precisely(precise_list)
+    print(result_dict)
+    write_log_to_excel(get_time(), result_dict)
+    
+    result_dict2 = wd.get_loglists_precisely(precise_list2)
+    print(result_dict2)
+    write_log_to_excel(get_time(), result_dict2)
+    
+    
+    

@@ -1,4 +1,9 @@
 #.venv
 .venv/
+
 # .env
 .env
+
+#
+input/
+output/

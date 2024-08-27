@@ -109,8 +109,7 @@ def get_game_log(role_id:str, start_date:str, end_date:str, datatype:str)-> dict
     select_datatype = Select(driver.find_element(By.ID, "datatype"))
     select_datatype.select_by_value(datatype)
     
-    initial_num = len(driver.get_log('browser')) # 沒用了
-    print(initial_num)
+    initial_num = len(driver.get_log('browser')) # 沒用了 原本是為抓取新LOG
     
     btn_submit = driver.find_element(By.XPATH, '//button[text()="查询"]')
     btn_submit.click()
@@ -187,7 +186,7 @@ def output_field_values(fields_to_output:list, log_list:list) -> str:
 def get_game_logs(criteria_list:list) -> list:
     logs = []
     for criterion in criteria_list:
-        raw_log = get_game_log(criterion[0],criterion[1],criterion[2].criterion[3])
+        raw_log = get_game_log(criterion[0],criterion[1],criterion[2],criterion[3])
         time.sleep(1)
         logs.append(raw_log)
     return logs
@@ -199,11 +198,11 @@ def get_loglists_some_datatypes(role_id:str, start_date:str, end_date:str, datat
         time.sleep(1)
         log_list = convert_to_log_list(raw_log["message"])
         loglists.append(log_list)
-    return loglists
+    return loglists  # 用list 只要有順序就好
 
 # return結果 會比get_game_logs多一筆 用以存放output_list 
 def get_loglists_precisely(precise_list:list):
-    trimmed_list = [sublist[1:4] for sublist in precise_list]
+    trimmed_list = [sublist[1:5] for sublist in precise_list]
     raw_logs:list = get_game_logs(trimmed_list) # logs 為每一筆查詢的結果
     
     result_dict = {}
@@ -213,9 +212,11 @@ def get_loglists_precisely(precise_list:list):
         if raw_logs[i]:
             log_list = convert_to_log_list(raw_logs[i]["message"])
             values_to_match:dict = precise_list[i][5]
+            
             if values_to_match:
                 log_list = filter_log_list(values_to_match, log_list)
-                result_dict[precise_list[i][0]] = log_list
+                
+            result_dict[str(precise_list[i][0])] = log_list
             num_list.append(len(log_list))
             
             output_str = ""
@@ -226,7 +227,7 @@ def get_loglists_precisely(precise_list:list):
             
     result_dict["output_field"]=output_list
     result_dict["num"]=num_list
-    return result_dict
+    return result_dict # 用dict 因為要用index作為key值
     
 
 def quit():
@@ -238,6 +239,7 @@ def quit():
 # import web_driver as wb
 
 if __name__ == '__main__':
+    import excel_utils as eu
     setup_by_bot()
     open_and_login("h73",h73_Workid,h73_Password)
     raw_log = get_game_log("150004660","20240728000000","20240810000000","loginrole")
