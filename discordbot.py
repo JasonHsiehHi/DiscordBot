@@ -4,10 +4,12 @@ import httplib2
 import os
 from apiclient import discovery
 import anthropic
+from dotenv import load_dotenv
 
+load_dotenv()
 
 # Google Sheets API env
-GoogleAPIKey = os.environ['GOOLEAPIKEY']
+GoogleAPIKey = os.environ['GOOGLEAPIKEY']
 SpreadsheetId = os.environ['SHEET_ID']  # 要使用哪一個Sheet和Range全由env決定
 DatabaseRange = os.environ['DATABASERANGE']
 
@@ -73,6 +75,8 @@ def send_to_claude(message_prompt, default_prompt):
                 {"role": "user", "content": f"{message_prompt}\n{default_prompt}"}
             ]
         )
+        print(message)
+        response = message.content[0].text
 
     except anthropic.APIError as e: # API 錯誤（例如無效的請求、認證錯誤等）
         response = f"API錯誤: {str(e)}"
@@ -83,7 +87,6 @@ def send_to_claude(message_prompt, default_prompt):
     except Exception as e: # 其他未預期的錯誤
         response = f"發生未知錯誤: {str(e)}"
 
-    response = message.content[0].text
     return response
 
 
@@ -102,16 +105,16 @@ async def on_ready():
 
 # todo: 要能決定gameid 這樣才能選擇在g66和h73中使用
 @clientBot.command()
-async def ask(ctx ,* ,message:str=None):
+async def ask(ctx ,* ,question:str=None):
     if ctx.author.bot: # 送信者為Bot時無視
         return
     if ctx.guild == None: # 不能私訊詢問
         return
 
-    if not message:
+    if not question:
         await ctx.send("沒有提問任何問題")
 
-    response = send_to_claude(message, default_prompt)
+    response = send_to_claude(question, default_prompt)
     await ctx.send(response)
 
 # Bot起動
